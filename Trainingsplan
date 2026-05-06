@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Training 2026">
+<meta name="theme-color" content="#080808">
+<title>Trainingsplan 2026 – Christopher</title>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SUPABASE SETUP – NUR HIER MUSST DU ETWAS EINTRAGEN!
+     
+     Schritt 1: Gehe zu https://supabase.com → "Start your project"
+     Schritt 2: Kostenlosen Account erstellen (GitHub Login empfohlen)
+     Schritt 3: "New Project" → Name: "training2026" → Region: Frankfurt
+     Schritt 4: Warte ~2 Min bis das Projekt bereit ist
+     Schritt 5: Gehe zu Project Settings → API
+     Schritt 6: Kopiere "Project URL" und "anon public" key hierher:
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+  const SUPABASE_URL  = 'https://ocnuzmxsulibflwwgoll.supabase.co';   // z.B. https://abcdefgh.supabase.co
+  const SUPABASE_KEY  = ‘eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbnV6bXhzdWxpYmZsd3dnb2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwODYyNTcsImV4cCI6MjA5MzY2MjI1N30.2i3gkrBDK-EOjZPHL8KPhNQafNwLvZpzfWnOwAuBUVE';       // langer String mit eyJ...
+  const USER_ID       = 'christopher';               // kann so bleiben
+</script>
+<!-- ═══════════════════════════════════════════════════════════════
+     SUPABASE TABELLEN – einmalig im Supabase SQL Editor ausführen:
+     
+     CREATE TABLE checked_days (
+       id text PRIMARY KEY,
+       user_id text,
+       checked_at timestamptz DEFAULT now()
+     );
+     CREATE TABLE swapped_days (
+       week_key text PRIMARY KEY,
+       user_id text,
+       swap_data jsonb,
+       updated_at timestamptz DEFAULT now()
+     );
+     (Row Level Security für beide Tabellen deaktivieren unter
+      Authentication → Policies → Disable RLS)
+     ═══════════════════════════════════════════════════════════════ -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Georgia', serif; background: #080808; min-height: 100vh; color: #e8e8e0; padding: 20px 14px 60px; }
+
+  /* ── HEADER ── */
+  .header { text-align: center; margin-bottom: 16px; }
+  .header h1 { font-family: 'Bebas Neue', sans-serif; font-size: 34px; letter-spacing: 4px; color: #fff; line-height: 1; }
+  .header p { font-size: 11px; color: #555; letter-spacing: 3px; margin-top: 5px; font-family: 'Inter', sans-serif; }
+
+  /* ── TIMER BANNER ── */
+  .timer-banner { border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; }
+  .timer-pulse { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.4)} }
+  .timer-content { flex: 1; min-width: 0; }
+  .timer-label { font-size: 10px; font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 2px; margin-bottom: 2px; }
+  .timer-main { font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 2px; line-height: 1.1; }
+  .timer-sub { font-size: 10px; color: #666; font-family: 'Inter', sans-serif; margin-top: 2px; }
+  .timer-jump-btn { padding: 7px 12px; border-radius: 8px; border: none; cursor: pointer; font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1px; white-space: nowrap; flex-shrink: 0; }
+  .timer-countdown { font-family: 'Inter', sans-serif; font-size: 11px; color: #555; text-align: center; margin-bottom: 14px; padding: 7px 12px; background: #0e0e0e; border: 1px solid #1a1a1a; border-radius: 8px; }
+  .timer-countdown span { font-weight: 600; }
+
+  /* ── PROGRESS BAR ── */
+  .progress-bar-wrap { height: 3px; background: #1a1a1a; border-radius: 2px; margin-top: 6px; }
+  .progress-bar-fill { height: 3px; border-radius: 2px; transition: width 0.6s ease; }
+
+  /* ── EVENT BADGES ── */
+  .event-badges { display: flex; gap: 8px; margin-bottom: 16px; }
+  .event-badge { flex: 1; border-radius: 10px; padding: 10px 12px; font-family: 'Inter', sans-serif; }
+  .event-badge .name { font-size: 11px; font-weight: 600; }
+  .event-badge .sub { font-size: 10px; color: #666; margin-top: 2px; }
+
+  /* ── PHASE TOGGLE ── */
+  .phase-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .phase-btn { flex: 1; padding: 11px 8px; border-radius: 10px; border: none; cursor: pointer; font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; transition: all 0.18s; }
+
+  /* ── WEEK TABS ── */
+  .week-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .week-btn { padding: 6px 11px; border-radius: 20px; border: 1px solid #222; background: #111; color: #555; font-size: 11px; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.18s; }
+
+  /* ── WEEK TIP ── */
+  .week-tip { border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: #888; line-height: 1.6; font-family: 'Inter', sans-serif; }
+
+  /* ── SWAP HINT ── */
+  .swap-hint { font-size: 10px; color: #333; font-family: 'Inter', sans-serif; text-align: center; margin-bottom: 10px; letter-spacing: 0.5px; }
+
+  /* ── DAY CARD ── */
+  .day-card { border-radius: 11px; overflow: hidden; margin-bottom: 7px; border: 1px solid #1a1a1a; background: #0e0e0e; transition: transform 0.15s, opacity 0.15s; position: relative; }
+  .day-card.dragging { opacity: 0.4; transform: scale(0.97); }
+  .day-card.drag-over { border-color: #444 !important; transform: translateX(4px); }
+  .day-card.completed { opacity: 0.6; }
+  .day-header { display: flex; align-items: center; padding: 11px 14px; gap: 10px; cursor: pointer; }
+  .day-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; position: relative; }
+  .day-check-overlay { position: absolute; inset: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; opacity: 0; transition: opacity 0.2s; }
+  .day-card.completed .day-check-overlay { opacity: 1; }
+  .day-card.completed .day-icon > span:first-child { opacity: 0.2; }
+  .day-meta { flex: 1; min-width: 0; }
+  .day-tags { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+  .day-dow { font-size: 10px; color: #444; font-family: 'Inter', sans-serif; letter-spacing: 1px; }
+  .day-type-tag { font-size: 11px; padding: 1px 7px; border-radius: 20px; font-family: 'Inter', sans-serif; }
+  .day-title { font-size: 13px; color: #ddd; font-family: 'Inter', sans-serif; font-weight: 500; }
+  .day-card.completed .day-title { text-decoration: line-through; color: #555; }
+  .day-duration { font-size: 11px; color: #444; font-family: 'Inter', sans-serif; }
+  .day-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .check-btn { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid #333; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; transition: all 0.18s; flex-shrink: 0; }
+  .check-btn:hover { border-color: #666; background: #1a1a1a; }
+  .day-card.completed .check-btn { background: #00C9A720; border-color: #00C9A7; }
+  .drag-handle { font-size: 14px; color: #2a2a2a; cursor: grab; padding: 4px; user-select: none; flex-shrink: 0; }
+  .drag-handle:active { cursor: grabbing; }
+  .arrow { font-size: 14px; color: #333; transition: transform 0.18s; display: inline-block; flex-shrink: 0; }
+  .arrow.open { transform: rotate(90deg); }
+
+  /* ── DAY CONTENT ── */
+  .day-content { padding: 0 14px 14px; border-top: 1px solid rgba(255,255,255,0.05); display: none; }
+  .day-content.open { display: block; }
+  .block { margin-top: 12px; }
+  .block-label { font-size: 10px; font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 1.5px; margin-bottom: 7px; }
+  .block-items { display: flex; flex-direction: column; gap: 5px; }
+  .block-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 10px; border-radius: 7px; }
+  .block-dot { width: 4px; height: 4px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+  .block-text { font-size: 12px; color: #aaa; line-height: 1.5; font-family: 'Inter', sans-serif; }
+
+  /* ── SYNC STATUS ── */
+  .sync-status { position: fixed; bottom: 16px; right: 14px; font-size: 10px; font-family: 'Inter', sans-serif; color: #333; display: flex; align-items: center; gap: 5px; transition: all 0.3s; }
+  .sync-dot { width: 5px; height: 5px; border-radius: 50%; background: #333; }
+  .sync-status.syncing .sync-dot { background: #FFD54F; animation: pulse 1s infinite; }
+  .sync-status.synced .sync-dot { background: #00C9A7; }
+  .sync-status.error .sync-dot { background: #FF6B6B; }
+  .sync-status.offline { color: #333; }
+
+  /* ── LEGEND ── */
+  .legend { background: #0e0e0e; border: 1px solid #1a1a1a; border-radius: 11px; padding: 14px; margin-top: 10px; }
+  .legend-title { font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; color: #444; margin-bottom: 10px; }
+  .hz-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .hz-badge { width: 26px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; font-family: 'Inter', sans-serif; }
+  .hz-range { font-size: 10px; color: #666; width: 50px; font-family: 'Inter', sans-serif; }
+  .hz-desc { font-size: 11px; color: #555; font-family: 'Inter', sans-serif; }
+  .gym-blocks { display: flex; gap: 8px; margin-top: 8px; }
+  .gym-block-card { flex: 1; border-radius: 8px; padding: 8px 10px; }
+  .gym-block-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; font-family: 'Inter', sans-serif; margin-bottom: 4px; }
+  .gym-block-desc { font-size: 11px; color: #666; font-family: 'Inter', sans-serif; line-height: 1.5; }
+  .gym-note { margin-top: 8px; font-size: 11px; color: #444; font-family: 'Inter', sans-serif; }
+  .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #222; letter-spacing: 1px; font-family: 'Inter', sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>TRAININGSPLAN 2026</h1>
+  <p>TRIATHLON · HALBMARATHON · CHRISTOPHER</p>
+</div>
+
+<div id="timer-banner"></div>
+<div id="timer-countdown"></div>
+
+<div class="event-badges">
+  <div class="event-badge" style="background:#00C9A712;border:1px solid #00C9A735;">
+    <div class="name" style="color:#00C9A7;">🏊 Fitness-Triathlon · 06./07. Juni</div>
+    <div class="sub">13. Apr → 01. Juni</div>
+  </div>
+  <div class="event-badge" style="background:#FF6B6B12;border:1px solid #FF6B6B35;">
+    <div class="name" style="color:#FF6B6B;">🏃 Halbmarathon · 05. Juli</div>
+    <div class="sub">09. Juni → 29. Juni</div>
+  </div>
+</div>
+
+<div class="phase-toggle">
+  <button class="phase-btn" id="btn-p1" onclick="setPhase(0)" style="background:#00C9A7;color:#000;">Phase 1 – Triathlon</button>
+  <button class="phase-btn" id="btn-p2" onclick="setPhase(1)" style="background:#151515;color:#555;">Phase 2 – Halbmarathon</button>
+</div>
+
+<div class="week-tabs" id="week-tabs"></div>
+<div class="week-tip" id="week-tip"></div>
+<div class="swap-hint">☰ ziehen zum Verschieben &nbsp;·&nbsp; ○ abhaken wenn erledigt</div>
+<div id="days-container"></div>
+
+<div class="legend">
+  <div class="legend-title">HF-ZONEN (% HFmax)</div>
+  <div class="hz-row"><div class="hz-badge" style="background:#4FC3F720;border:1px solid #4FC3F740;color:#4FC3F7;">Z1</div><div class="hz-range">&lt; 60%</div><div class="hz-desc">Aktive Erholung · Spazieren</div></div>
+  <div class="hz-row"><div class="hz-badge" style="background:#81C78420;border:1px solid #81C78440;color:#81C784;">Z2</div><div class="hz-range">60–70%</div><div class="hz-desc">Grundlage · du kannst sprechen</div></div>
+  <div class="hz-row"><div class="hz-badge" style="background:#FFD54F20;border:1px solid #FFD54F40;color:#FFD54F;">Z3</div><div class="hz-range">70–80%</div><div class="hz-desc">Tempo · Sätze werden kürzer</div></div>
+  <div class="hz-row"><div class="hz-badge" style="background:#FF8A6520;border:1px solid #FF8A6540;color:#FF8A65;">Z4</div><div class="hz-range">80–90%</div><div class="hz-desc">Laktatschwelle · kurze Intervalle</div></div>
+</div>
+
+<div class="legend" style="margin-top:10px;">
+  <div class="legend-title">GYM-STRUKTUR</div>
+  <div class="gym-blocks">
+    <div class="gym-block-card" style="background:#00C9A715;border:1px solid #00C9A730;">
+      <div class="gym-block-label" style="color:#00C9A7;">BLOCK A</div>
+      <div class="gym-block-desc">Funktional · Mobilität · Core · Stabilität</div>
+    </div>
+    <div class="gym-block-card" style="background:#CE93D815;border:1px solid #CE93D830;">
+      <div class="gym-block-label" style="color:#CE93D8;">BLOCK B</div>
+      <div class="gym-block-desc">Hypertrophie · Oberkörper · 8–12 Wdh</div>
+    </div>
+  </div>
+  <div class="gym-note">⚠️ Block A immer zuerst – nie umgekehrt.</div>
+</div>
+
+<div class="footer">TRAININGSPLAN 2026 · CHRISTOPHER</div>
+<div class="sync-status" id="sync-status"><div class="sync-dot"></div><span id="sync-text">lokal</span></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// SUPABASE INIT
+// ════════════════════════════════════════════════════════════
+let db = null;
+const supabaseReady = (typeof SUPABASE_URL === 'string' && SUPABASE_URL.startsWith('https'));
+
+if (supabaseReady) {
+  try {
+    db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch(e) { db = null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+let currentPhase = 0;
+let currentWeek  = 0;
+let openDay      = null;
+let checkedDays  = new Set();   // keys: "p0_w1_2" = phase0, weekIdx1, dayIdx2
+let swappedWeeks = {};          // key: "p0_w1" → [0,1,2,3,4,5,6] (day order)
+let dragSrcIdx   = null;
+
+// ════════════════════════════════════════════════════════════
+// TRAININGSPLAN DATA
+// ════════════════════════════════════════════════════════════
+const phases = [
+  {
+    id:"p1", color:"#00C9A7",
+    weeks:[
+      {
+        label:"Wo 1–3 · Grundlage",
+        tip:"Basis legen. Zone-2-Laufen konsequent langsam halten (~6:30–7:00/km). Schwimmen: Intervallstruktur für Ausdaueraufbau. Rad: RPM über Watt. Gym: Funktional + Hypertrophie kombiniert.",
+        days:[
+          {day:"Mo",type:"gym",title:"Gym – Hybrid",duration:"55 min",blocks:[
+            {label:"BLOCK A · Funktional & Mobilität",color:"#00C9A7",items:["Fußmobilität: 3×10 Ankle CARs + 3×10 Elevated Toe Touch + 2×45s Calf Stretch","3×8 Goblet Squat (Ferse am Boden, Knie über Zeh)","3×10 Einbein-RDL mit KH (Sprunggelenk-Stabilität)","3×12 Pallof Press","3×15 Dead Bug"]},
+            {label:"BLOCK B · Hypertrophie Oberkörper",color:"#CE93D8",items:["3×10 KH Bankdrücken (kontrolliert, 3s exzentrisch)","3×8 Klimmzüge mit Zusatzgewicht oder BW","3×12 KH Schulterdrücken","3×12 Bizeps Curl KH","3×12 Trizeps Overhead Extension"]}
+          ]},
+          {day:"Di",type:"run",title:"Laufen – Zone 2",duration:"40 min",blocks:[
+            {label:"EINHEIT",color:"#FF6B6B",items:["5 min Einlaufen / Gehen","30 min Dauerlauf Zone 2 → HF-Ziel: 135–148 bpm","Pace bewusst drosseln: ~6:30–7:00/km","Test: Du kannst dabei ganze Sätze sprechen","5 min Cool-down","⚠️ Fühlt sich zu langsam an? Genau richtig."]}
+          ]},
+          {day:"Mi",type:"swim",title:"Schwimmen – Intervallaufbau",duration:"45 min",blocks:[
+            {label:"EINHEIT – Ausdauer aufbauen",color:"#4FC3F7",items:["200m Einschwimmen (Brust ok)","Wo 1: 8×100m Kraul / 30s Pause","Wo 2: 6×150m Kraul / 30s Pause","Wo 3: 4×200m Kraul / 30s Pause","100m Ausschwimmen Brust","FOKUS: Bilateral atmen (alle 3 Züge), bewusst unter Wasser ausatmen"]}
+          ]},
+          {day:"Do",type:"rest",title:"Aktive Erholung",duration:"–",blocks:[
+            {label:"OPTIONAL",color:"#546E7A",items:["15 min Mobility: Hüfte, Schultern, Füße","Foam Roller: Waden & Oberschenkel"]}
+          ]},
+          {day:"Fr",type:"bike",title:"Rad (Zwift) – RPM-Drills",duration:"55 min",blocks:[
+            {label:"EINHEIT – Trittfrequenz-Fokus",color:"#FFD54F",items:["10 min Zone 1 bei 70–75 rpm (Warm-up)","3× (5 min bei 80 rpm Zone 2 / 3 min bei 70 rpm)","2× (3 min bei 85–90 rpm leichter Gang / 2 min normal)","10 min Zone 1 Cool-down","💡 Leichterer Gang = höhere Frequenz. Nicht drücken, treten!"]}
+          ]},
+          {day:"Sa",type:"run",title:"Langer Lauf – Zone 2",duration:"65–75 min",blocks:[
+            {label:"EINHEIT",color:"#FF6B6B",items:["Wo 1–2: 60–65 min Zone 2 (HF 135–148)","Wo 3: 70–75 min Zone 2","Ab 45 min: Gel oder Banane mitnehmen & testen","Pace egal – Herzfrequenz steuert alles"]}
+          ]},
+          {day:"So",type:"rest",title:"Ruhetag",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Vollständige Erholung. Schlafen & essen."]}]},
+        ]
+      },
+      {
+        label:"Wo 4–5 · Aufbau + Brick",
+        tip:"Erste Bricks einführen. Schwimmen jetzt donnerstags. RPM-Ziel: 75–80 rpm konstant. Gym-Volumen leicht erhöhen.",
+        days:[
+          {day:"Mo",type:"gym",title:"Gym – Hybrid (Volumen +)",duration:"60 min",blocks:[
+            {label:"BLOCK A · Funktional & Mobilität",color:"#00C9A7",items:["Fußmobilität-Routine (wie Wo 1–3)","Hüftöffner: 3×30s 90/90 Stretch","3×8 Bulgarian Split Squat mit KH","3×10 Step-Up auf Box mit Knie-Drive","3×10 Schulter Y/T/W (Schulterblatt-Stabilität fürs Schwimmen)","3×10 Hollow Body Rock"]},
+            {label:"BLOCK B · Hypertrophie Oberkörper",color:"#CE93D8",items:["4×10 KH Bankdrücken (Gewicht leicht erhöhen)","4×8 Klimmzüge mit Zusatzgewicht","3×12 Seitheben KH","3×10 Face Pull (Schultergesundheit fürs Schwimmen)","3×12 Hammer Curl","3×12 Trizeps Dips oder Pushdown"]}
+          ]},
+          {day:"Di",type:"run",title:"Laufen – Intervalle",duration:"45 min",blocks:[
+            {label:"EINHEIT",color:"#FF6B6B",items:["10 min Zone 2 Warm-up","5× (3 min Zone 3 ~5:00–5:20/km / 2 min Zone 1 Traben)","10 min Zone 2 Cool-down","HF Zone 3: 155–168 bpm"]}
+          ]},
+          {day:"Mi",type:"rest",title:"Aktive Erholung",duration:"–",blocks:[
+            {label:"OPTIONAL",color:"#546E7A",items:["20 min Mobility","Waden foam rollen (Laufumfang steigt)"]}
+          ]},
+          {day:"Do",type:"swim",title:"Schwimmen – Ausdauerblöcke",duration:"45 min",blocks:[
+            {label:"EINHEIT",color:"#4FC3F7",items:["200m Einschwimmen","Wo 4: 3×300m Kraul / 30s Pause","Wo 5: 2×400m Kraul / 45s Pause + 1×200m","100m Ausschwimmen","🎯 Wenn 400m am Stück klappt: Triathlon-Distanz ist gesichert!"]}
+          ]},
+          {day:"Fr",type:"bike",title:"Rad (Zwift) – Tempo",duration:"55 min",blocks:[
+            {label:"EINHEIT",color:"#FFD54F",items:["10 min Warm-up bei 75 rpm","3× (6 min Zone 3 bei 80–85 rpm / 4 min Zone 2)","10 min Cool-down","RPM-Ziel: 80 rpm halten. Wenn Frequenz fällt → Gang runter!"]}
+          ]},
+          {day:"Sa",type:"brick",title:"BRICK – Rad + Lauf",duration:"75–80 min",blocks:[
+            {label:"ERSTES BRICK",color:"#00C9A7",items:["45 min Zwift Zone 2 bei 80 rpm","Übergang üben & Zeit stoppen (T1)!","Wo 4: 25 min Laufen Zone 2","Wo 5: 30 min Laufen Zone 2","⚠️ Die ersten 5–10 min Laufen fühlen sich komisch an → völlig normal!","Nach Brick: Beine hoch, viel trinken"]}
+          ]},
+          {day:"So",type:"rest",title:"Ruhetag",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Vollständige Erholung."]}]},
+        ]
+      },
+      {
+        label:"Wo 6–7 · Race Prep",
+        tip:"Wettkampf-Simulation & Tapering. Schwimmen weiterhin donnerstags. Woche 7: Volumen -40%, nur kurze Intensitäten. Vertrauen in die geleistete Arbeit.",
+        days:[
+          {day:"Mo",type:"gym",title:"Gym – Hybrid (reduziert)",duration:"45 min",blocks:[
+            {label:"BLOCK A · Funktional (reduziert)",color:"#00C9A7",items:["Fußmobilitäts-Routine","2×8 Bulgarian Split Squat","2×10 Pallof Press","2×15 Dead Bug"]},
+            {label:"BLOCK B · Hypertrophie (reduziert)",color:"#CE93D8",items:["2×10 KH Bankdrücken","2×8 Klimmzüge","2×12 Bizeps + Trizeps Superset","⚠️ Kein Muskelkater produzieren!"]}
+          ]},
+          {day:"Di",type:"run",title:"Laufen – Pace-Arbeit",duration:"40 min",blocks:[
+            {label:"EINHEIT",color:"#FF6B6B",items:["10 min Warm-up","3× (5 min Wettkampf-Pace ~5:00–5:20/km / 3 min locker)","10 min Cool-down","Wo 7 (Tapering): Nur 25 min locker Zone 2"]}
+          ]},
+          {day:"Mi",type:"rest",title:"Ruhetag / Tapering",duration:"–",blocks:[{label:"CHECKLIST",color:"#546E7A",items:["Helm gecheckt?","Rad gecheckt?","Laufschuhe ok?","Wetsuit (falls nötig)?","Ernährungsplan für Renntag?"]}]},
+          {day:"Do",type:"swim",title:"Schwimmen – Rennsimulation",duration:"40 min",blocks:[
+            {label:"EINHEIT",color:"#4FC3F7",items:["400m Kraul KOMPLETT DURCHSCHWIMMEN – kein Stopp!","2×200m locker / 30s Pause","100m Ausschwimmen","Wo 7: Nur 600m locker, kein Druck","Mental: Triathlon-Start visualisieren"]}
+          ]},
+          {day:"Fr",type:"bike",title:"Rad – locker",duration:"35 min",blocks:[
+            {label:"EINHEIT",color:"#FFD54F",items:["30 min locker Zone 1–2 bei 80–85 rpm","Wo 7: Nur 20 min sehr locker"]}
+          ]},
+          {day:"Sa",type:"brick",title:"BRICK – Rennsimulation",duration:"70 min",blocks:[
+            {label:"GENERALPROBE",color:"#00C9A7",items:["13 km Rad (Wettkampf-Pace)","T1 Übergang – Zeit stoppen!","2,8 km Laufen (Wettkampf-Pace)","Übergänge realistisch: Helm ab, Schuhe an, los","Wo 7: Nur 20 min lockeres Einradeln + 10 min Traben"]}
+          ]},
+          {day:"So",type:"rest",title:"Ruhetag / Anreise",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Regeneration. Früh schlafen. Pasta essen."]}]},
+        ]
+      }
+    ]
+  },
+  {
+    id:"p2", color:"#FF6B6B",
+    weeks:[
+      {
+        label:"Wo 1 · Erholung & Umstieg",
+        tip:"3–4 Tage Ruhe nach dem Triathlon. Kein Druck. Dann sanft auf Laufen als Hauptdisziplin umstellen.",
+        days:[
+          {day:"Mo",type:"rest",title:"Erholung – Post-Triathlon",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Vollständige Ruhe. Essen, schlafen. Keine Aktivität."]}]},
+          {day:"Di",type:"rest",title:"Aktive Erholung",duration:"20 min",blocks:[{label:"OPTIONAL",color:"#546E7A",items:["Leichter Spaziergang oder Dehnen","Foam Roller: Waden & Oberschenkel"]}]},
+          {day:"Mi",type:"swim",title:"Lockeres Schwimmen",duration:"35 min",blocks:[{label:"EINHEIT",color:"#4FC3F7",items:["Locker 800m, Brust & Kraul gemischt","Zone 1. Kein Leistungsgedanke.","Muskeln durchspülen."]}]},
+          {day:"Do",type:"run",title:"Laufen – erster Test",duration:"30 min",blocks:[{label:"EINHEIT",color:"#FF6B6B",items:["Sehr locker Zone 1–2","Pace 7:00–7:30/km","Wie fühlen sich die Beine nach dem Triathlon an?","Wenn es sich nicht gut anfühlt → abbrechen, kein Problem"]}]},
+          {day:"Fr",type:"rest",title:"frei",duration:"–",blocks:[{label:"OPTIONAL",color:"#546E7A",items:["Mobilität Hüfte & Füße"]}]},
+          {day:"Sa",type:"run",title:"Laufen – Grundlage",duration:"55 min",blocks:[{label:"EINHEIT",color:"#FF6B6B",items:["50 min Zone 2 Dauerlauf (HF 135–148)","Gel ab 35 min mitnehmen & testen"]}]},
+          {day:"So",type:"rest",title:"Ruhetag",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Erholung."]}]},
+        ]
+      },
+      {
+        label:"Wo 2–3 · HM-Aufbau",
+        tip:"3 Läufe pro Woche. Langer Lauf Samstag ist der wichtigste. Schwimmen jetzt donnerstags als aktive Erholung. Gym: Hypertrophie-Block bleibt, Beine reduziert.",
+        days:[
+          {day:"Mo",type:"gym",title:"Gym – Hybrid HM-Phase",duration:"55 min",blocks:[
+            {label:"BLOCK A · Laufspezifisch",color:"#FF6B6B",items:["Fußmobilität-Routine + Hüftbeuger Dehnung","3×12 Hip Thrust (Gesäß für Laufökonomie)","3×10 Step-Up mit Knie-Drive","3×15 Clamshell (Hüftstabilität)","3×10 Einbein-Calf Raise (Schienbeinschutz)"]},
+            {label:"BLOCK B · Hypertrophie Oberkörper",color:"#CE93D8",items:["4×10 KH Bankdrücken","4×8 Klimmzüge mit Gewicht","3×12 KH Schulterdrücken","3×12 Bizeps Curl + Trizeps Superset","3×15 Face Pull"]}
+          ]},
+          {day:"Di",type:"run",title:"Laufen – Tempo",duration:"45 min",blocks:[
+            {label:"EINHEIT – HM-Pace-Arbeit",color:"#FF6B6B",items:["10 min Warm-up Zone 2","4× (4 min HM-Zielpace ~5:45–6:00/km / 2 min Zone 1)","10 min Cool-down","Basierend auf 10K-PR (5:56/km) ist ~5:45–6:00/km HM-Pace realistisch"]}
+          ]},
+          {day:"Mi",type:"run",title:"Laufen – Mitteldistanz",duration:"50 min",blocks:[{label:"EINHEIT",color:"#FF6B6B",items:["45 min Zone 2 Dauerlauf","HF 135–148, gleichmäßig","Di + Mi + Sa = 3 Lauftage – genug für HM"]}]},
+          {day:"Do",type:"swim",title:"Schwimmen – aktive Erholung",duration:"35 min",blocks:[{label:"EINHEIT",color:"#4FC3F7",items:["Locker 800–1.000m","Zone 1, Brust & Kraul gemischt","Kein Leistungsdruck – Beine erholen sich im Wasser gut"]}]},
+          {day:"Fr",type:"bike",title:"Rad – aktive Erholung",duration:"35 min",blocks:[{label:"EINHEIT",color:"#FFD54F",items:["30 min locker Zone 1 auf Zwift","RPM 80–85 – Technik beibehalten","Beine für Samstag frisch halten"]}]},
+          {day:"Sa",type:"run",title:"Langer Lauf",duration:"90–95 min",blocks:[
+            {label:"DER WICHTIGSTE LAUF",color:"#FF6B6B",items:["Wo 2: 80–85 min Zone 2","Wo 3: 90–95 min Zone 2","Alle 30–40 min ein Gel + trinken – üben!","Pace: 6:30–7:00/km. Zeit im Bein > Pace"]}
+          ]},
+          {day:"So",type:"rest",title:"Ruhetag",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Vollständige Erholung."]}]},
+        ]
+      },
+      {
+        label:"Wo 4 · Tapering",
+        tip:"Volumen -40%. Intensität kurz halten. Vertraue der Arbeit der letzten Wochen. Gym auf Minimum reduzieren.",
+        days:[
+          {day:"Mo",type:"gym",title:"Gym – nur Aktivierung",duration:"35 min",blocks:[
+            {label:"BLOCK A · Mini-Funktional",color:"#FF6B6B",items:["Fußmobilität 10 min","2×10 Hip Thrust","2×10 Calf Raise"]},
+            {label:"BLOCK B · Mini-Hypertrophie",color:"#CE93D8",items:["2×10 KH Bankdrücken (leichter als sonst)","2×8 Klimmzüge","2×12 Bizeps + Trizeps","⚠️ Absolut kein Muskelkater!"]}
+          ]},
+          {day:"Di",type:"run",title:"Laufen – locker + Strides",duration:"30 min",blocks:[{label:"EINHEIT",color:"#FF6B6B",items:["20 min Zone 2","4× 20s leichtes Anziehen (Strides) mit 40s Pause","5 min Cool-down"]}]},
+          {day:"Mi",type:"rest",title:"frei",duration:"–",blocks:[{label:"CHECKLIST",color:"#546E7A",items:["Laufschuhe ok?","Wettkampf-Ernährung geplant?","Pasta gekocht?"]}]},
+          {day:"Do",type:"run",title:"Kurzer Lauf",duration:"20 min",blocks:[{label:"EINHEIT",color:"#FF6B6B",items:["15–20 min sehr locker","Nur um sich gut zu fühlen","Kein Tempo, kein Druck"]}]},
+          {day:"Fr",type:"rest",title:"Ruhetag",duration:"–",blocks:[{label:"",color:"#546E7A",items:["Füße hochlegen. Gut schlafen."]}]},
+          {day:"Sa",type:"rest",title:"Tag vor dem Rennen",duration:"15 min",blocks:[{label:"OPTIONAL",color:"#546E7A",items:["10–15 min sehr lockeres Einlaufen","2×20s Strides","Früh essen. Früh schlafen."]}]},
+          {day:"So",type:"race",title:"🏃 HALBMARATHON!",duration:"~2h",blocks:[
+            {label:"RENNSTRATEGIE",color:"#FFD700",items:["Erste 5 km bewusst ruhig (Zone 2) – nicht mitreißen lassen!","Km 5–15: nach Gefühl steigern","Km 15–21: alles geben","Alle 20–25 min ein Gel","Trinken an JEDEM Verpflegungspunkt","🏅 Du hast es verdient. Alles geben!"]}
+          ]},
+        ]
+      }
+    ]
+  }
+];
+
+const typeConfig = {
+  run:   {color:"#FF6B6B",bg:"#1a0808",icon:"🏃",label:"Laufen"},
+  swim:  {color:"#4FC3F7",bg:"#051520",icon:"🏊",label:"Schwimmen"},
+  bike:  {color:"#FFD54F",bg:"#141000",icon:"🚴",label:"Rad / Zwift"},
+  gym:   {color:"#CE93D8",bg:"#100518",icon:"🏋️",label:"Gym"},
+  brick: {color:"#00C9A7",bg:"#001a14",icon:"⚡",label:"Brick"},
+  rest:  {color:"#546E7A",bg:"#0a0a0a",icon:"💤",label:"Erholung"},
+  race:  {color:"#FFD700",bg:"#141000",icon:"🏅",label:"Wettkampf"},
+};
+
+// ════════════════════════════════════════════════════════════
+// TIMER – Startdatum 13. April 2026
+// ════════════════════════════════════════════════════════════
+const schedule = [
+  { phase:0, weekIdx:0, start:new Date(2026,3,13), end:new Date(2026,4,3),  label:"Wo 1–3 · Grundlage" },
+  { phase:0, weekIdx:1, start:new Date(2026,4,4),  end:new Date(2026,4,17), label:"Wo 4–5 · Aufbau + Brick" },
+  { phase:0, weekIdx:2, start:new Date(2026,4,18), end:new Date(2026,5,7),  label:"Wo 6–7 · Race Prep" },
+  { phase:1, weekIdx:0, start:new Date(2026,5,9),  end:new Date(2026,5,14), label:"Wo 1 · Erholung & Umstieg" },
+  { phase:1, weekIdx:1, start:new Date(2026,5,15), end:new Date(2026,5,28), label:"Wo 2–3 · HM-Aufbau" },
+  { phase:1, weekIdx:2, start:new Date(2026,5,29), end:new Date(2026,6,5),  label:"Wo 4 · Tapering" },
+];
+const TRIATHLON_DATE = new Date(2026,5,6);
+const HM_DATE        = new Date(2026,6,5);
+
+function getTimerInfo() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (today < schedule[0].start) {
+    return { status:"pre", days: Math.round((schedule[0].start - today)/86400000) };
+  }
+  for (const s of schedule) {
+    const end = new Date(s.end); end.setHours(23,59,59,999);
+    if (today >= s.start && today <= end) {
+      const totalDays  = Math.round((end - s.start)/86400000) + 1;
+      const doneDays   = Math.round((today - s.start)/86400000);
+      const progress   = Math.round((doneDays/totalDays)*100);
+      const nextEvent  = s.phase === 0 ? TRIATHLON_DATE : HM_DATE;
+      const daysToEvent = Math.round((nextEvent - today)/86400000);
+      return { status:"active", phase:s.phase, weekIdx:s.weekIdx, label:s.label, progress, daysToEvent };
+    }
+  }
+  if (today > schedule[2].end && today < schedule[3].start) return { status:"gap" };
+  if (today > schedule[5].end) return { status:"done" };
+  return { status:"unknown" };
+}
+
+function initTimer() {
+  const info    = getTimerInfo();
+  const banner  = document.getElementById('timer-banner');
+  const cd      = document.getElementById('timer-countdown');
+
+  if (info.status === "pre") {
+    const c = "#00C9A7";
+    banner.innerHTML = `<div class="timer-banner" style="background:${c}12;border:1px solid ${c}30;">
+      <div class="timer-pulse" style="background:${c};"></div>
+      <div class="timer-content">
+        <div class="timer-label" style="color:${c};">TRAININGSSTART IN</div>
+        <div class="timer-main" style="color:#fff;">${info.days} TAGE</div>
+        <div class="timer-sub">Plan startet am 13. April 2026</div>
+      </div></div>`;
+    return;
+  }
+
+  if (info.status === "active") {
+    const c         = info.phase === 0 ? "#00C9A7" : "#FF6B6B";
+    const phaseName = info.phase === 0 ? "TRIATHLON-PHASE" : "HALBMARATHON-PHASE";
+    const eventName = info.phase === 0 ? "Triathlon" : "Halbmarathon";
+    banner.innerHTML = `<div class="timer-banner" style="background:${c}12;border:1px solid ${c}30;">
+      <div class="timer-pulse" style="background:${c};"></div>
+      <div class="timer-content">
+        <div class="timer-label" style="color:${c};">📍 AKTUELLE WOCHE · ${phaseName}</div>
+        <div class="timer-main" style="color:#fff;">${info.label}</div>
+        <div class="timer-sub">Noch ${info.daysToEvent} Tage bis zum ${eventName} · Fortschritt: ${info.progress}%</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${info.progress}%;background:${c};"></div></div>
+      </div>
+      <button class="timer-jump-btn" style="background:${c};color:#000;" onclick="jumpToCurrentWeek(${info.phase},${info.weekIdx})">↑ Jetzt</button>
+    </div>`;
+    cd.innerHTML = `<div class="timer-countdown">
+      Heute: <span style="color:#e8e8e0;">${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'})}</span>
+      &nbsp;·&nbsp; <span style="color:${c};">${eventName} in ${info.daysToEvent} Tagen</span>
+    </div>`;
+    jumpToCurrentWeek(info.phase, info.weekIdx);
+    return;
+  }
+
+  if (info.status === "gap") {
+    banner.innerHTML = `<div class="timer-banner" style="background:#FFD54F12;border:1px solid #FFD54F30;">
+      <div class="timer-pulse" style="background:#FFD54F;"></div>
+      <div class="timer-content">
+        <div class="timer-label" style="color:#FFD54F;">🏆 TRIATHLON GESCHAFFT!</div>
+        <div class="timer-main" style="color:#fff;">Erholungsphase</div>
+        <div class="timer-sub">Phase 2 startet am 09. Juni</div>
+      </div></div>`;
+    return;
+  }
+
+  if (info.status === "done") {
+    banner.innerHTML = `<div class="timer-banner" style="background:#FFD70012;border:1px solid #FFD70030;">
+      <div class="timer-pulse" style="background:#FFD700;"></div>
+      <div class="timer-content">
+        <div class="timer-label" style="color:#FFD700;">🏅 PLAN ABGESCHLOSSEN!</div>
+        <div class="timer-main" style="color:#fff;">Triathlon & Halbmarathon ✓</div>
+        <div class="timer-sub">Glückwunsch, Christopher! Beide Events erfolgreich absolviert.</div>
+      </div></div>`;
+  }
+}
+
+function jumpToCurrentWeek(phase, weekIdx) {
+  currentPhase = phase; currentWeek = weekIdx; openDay = null;
+  document.getElementById('btn-p1').style.background = phase===0 ? '#00C9A7' : '#151515';
+  document.getElementById('btn-p1').style.color       = phase===0 ? '#000'    : '#555';
+  document.getElementById('btn-p2').style.background = phase===1 ? '#FF6B6B' : '#151515';
+  document.getElementById('btn-p2').style.color       = phase===1 ? '#000'    : '#555';
+  render();
+}
+
+// ════════════════════════════════════════════════════════════
+// SUPABASE – Laden & Speichern
+// ════════════════════════════════════════════════════════════
+function setSyncStatus(state, text) {
+  const el  = document.getElementById('sync-status');
+  const txt = document.getElementById('sync-text');
+  el.className = `sync-status ${state}`;
+  txt.textContent = text;
+}
+
+async function loadFromSupabase() {
+  if (!db) { loadFromLocal(); return; }
+  setSyncStatus('syncing','laden…');
+  try {
+    const [{ data: chk }, { data: swp }] = await Promise.all([
+      db.from('checked_days').select('id').eq('user_id', USER_ID),
+      db.from('swapped_days').select('week_key,swap_data').eq('user_id', USER_ID),
+    ]);
+    checkedDays  = new Set((chk||[]).map(r => r.id));
+    swappedWeeks = {};
+    (swp||[]).forEach(r => { swappedWeeks[r.week_key] = r.swap_data; });
+    setSyncStatus('synced','synchronisiert');
+    // Auch lokal cachen
+    localStorage.setItem('checkedDays',  JSON.stringify([...checkedDays]));
+    localStorage.setItem('swappedWeeks', JSON.stringify(swappedWeeks));
+    render();
+  } catch(e) {
+    setSyncStatus('error','Fehler – lokal');
+    loadFromLocal();
+  }
+}
+
+function loadFromLocal() {
+  try {
+    const c = localStorage.getItem('checkedDays');
+    const s = localStorage.getItem('swappedWeeks');
+    if (c) checkedDays  = new Set(JSON.parse(c));
+    if (s) swappedWeeks = JSON.parse(s);
+  } catch(e) {}
+  setSyncStatus('offline','lokal gespeichert');
+  render();
+}
+
+async function toggleCheck(phase, weekIdx, dayIdx) {
+  const key = `p${phase}_w${weekIdx}_${dayIdx}`;
+  const wasChecked = checkedDays.has(key);
+  if (wasChecked) checkedDays.delete(key); else checkedDays.add(key);
+  // Lokal sofort speichern
+  localStorage.setItem('checkedDays', JSON.stringify([...checkedDays]));
+  render();
+  if (!db) { setSyncStatus('offline','lokal gespeichert'); return; }
+  setSyncStatus('syncing','speichern…');
+  try {
+    if (wasChecked) {
+      await db.from('checked_days').delete().eq('id', key).eq('user_id', USER_ID);
+    } else {
+      await db.from('checked_days').insert({ id: key, user_id: USER_ID });
+    }
+    setSyncStatus('synced','synchronisiert');
+  } catch(e) { setSyncStatus('error','Sync fehlgeschlagen'); }
+}
+
+async function saveSwap(weekKey, order) {
+  swappedWeeks[weekKey] = order;
+  localStorage.setItem('swappedWeeks', JSON.stringify(swappedWeeks));
+  if (!db) { setSyncStatus('offline','lokal gespeichert'); return; }
+  setSyncStatus('syncing','speichern…');
+  try {
+    await db.from('swapped_days').upsert({
+      week_key: weekKey, user_id: USER_ID, swap_data: order, updated_at: new Date().toISOString()
+    });
+    setSyncStatus('synced','synchronisiert');
+  } catch(e) { setSyncStatus('error','Sync fehlgeschlagen'); }
+}
+
+// ════════════════════════════════════════════════════════════
+// DRAG & DROP – Tage innerhalb einer Woche verschieben
+// ════════════════════════════════════════════════════════════
+function getWeekKey() { return `p${currentPhase}_w${currentWeek}`; }
+
+function getDayOrder() {
+  const key   = getWeekKey();
+  const week  = phases[currentPhase].weeks[currentWeek];
+  const count = week.days.length;
+  const saved = swappedWeeks[key];
+  if (saved && saved.length === count) return saved;
+  return week.days.map((_,i) => i);
+}
+
+function onDragStart(e, idx) {
+  dragSrcIdx = idx;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragEnd(e) { e.currentTarget.classList.remove('dragging'); }
+function onDragOver(e, idx) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.day-card').forEach((c,i) => {
+    c.classList.toggle('drag-over', i === idx && i !== dragSrcIdx);
+  });
+}
+function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+function onDrop(e, targetIdx) {
+  e.preventDefault();
+  document.querySelectorAll('.day-card').forEach(c => c.classList.remove('drag-over'));
+  if (dragSrcIdx === null || dragSrcIdx === targetIdx) return;
+  const order = getDayOrder();
+  const newOrder = [...order];
+  const [moved] = newOrder.splice(dragSrcIdx, 1);
+  newOrder.splice(targetIdx, 0, moved);
+  openDay = null;
+  saveSwap(getWeekKey(), newOrder);
+  render();
+  dragSrcIdx = null;
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════════════════
+function setPhase(i) {
+  currentPhase = i; currentWeek = 0; openDay = null;
+  document.getElementById('btn-p1').style.background = i===0 ? '#00C9A7' : '#151515';
+  document.getElementById('btn-p1').style.color       = i===0 ? '#000'    : '#555';
+  document.getElementById('btn-p2').style.background = i===1 ? '#FF6B6B' : '#151515';
+  document.getElementById('btn-p2').style.color       = i===1 ? '#000'    : '#555';
+  render();
+}
+
+function setWeek(i) { currentWeek = i; openDay = null; render(); }
+function toggleDay(i) { openDay = openDay === i ? null : i; render(); }
+
+function render() {
+  const phase  = phases[currentPhase];
+  const week   = phase.weeks[currentWeek];
+  const c      = phase.color;
+  const order  = getDayOrder();
+
+  // Week tabs
+  document.getElementById('week-tabs').innerHTML = phase.weeks.map((w,i) => `
+    <button class="week-btn" onclick="setWeek(${i})" style="${currentWeek===i?`background:${c}20;border-color:${c};color:${c};`:''}">
+      ${w.label}
+    </button>`).join('');
+
+  // Tip
+  const tipEl = document.getElementById('week-tip');
+  tipEl.style.cssText = `background:${c}10;border:1px solid ${c}25;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#888;line-height:1.6;font-family:'Inter',sans-serif;`;
+  tipEl.innerHTML = `<span style="color:${c};font-weight:600;">💡 </span>${week.tip}`;
+
+  // Days
+  document.getElementById('days-container').innerHTML = order.map((dayIdx, renderIdx) => {
+    const d      = week.days[dayIdx];
+    const cfg    = typeConfig[d.type];
+    const isOpen = openDay === renderIdx;
+    const ckKey  = `p${currentPhase}_w${currentWeek}_${dayIdx}`;
+    const done   = checkedDays.has(ckKey);
+
+    const blocksHTML = isOpen && d.blocks ? d.blocks.map(b => `
+      <div class="block">
+        ${b.label ? `<div class="block-label" style="color:${b.color};">${b.label}</div>` : ''}
+        <div class="block-items">
+          ${b.items.map(item => `
+            <div class="block-item" style="background:${b.color}08;border:1px solid ${b.color}15;">
+              <div class="block-dot" style="background:${b.color};"></div>
+              <div class="block-text">${item}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('') : '';
+
+    return `
+      <div class="day-card ${done?'completed':''}"
+        draggable="true"
+        ondragstart="onDragStart(event,${renderIdx})"
+        ondragend="onDragEnd(event)"
+        ondragover="onDragOver(event,${renderIdx})"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event,${renderIdx})"
+        style="background:${isOpen?cfg.bg:'#0e0e0e'};border-color:${isOpen?cfg.color+'50':'#1a1a1a'};">
+        <div class="day-header" onclick="toggleDay(${renderIdx})">
+          <div class="day-icon" style="background:${cfg.color}18;">
+            <span>${cfg.icon}</span>
+            <div class="day-check-overlay" style="background:${cfg.color}30;">✓</div>
+          </div>
+          <div class="day-meta">
+            <div class="day-tags">
+              <span class="day-dow">${d.day}</span>
+              <span class="day-type-tag" style="color:${cfg.color};background:${cfg.color}15;">${cfg.label}</span>
+            </div>
+            <div class="day-title">${d.title}</div>
+          </div>
+          <div class="day-actions" onclick="event.stopPropagation()">
+            <span class="drag-handle" title="Verschieben">⠿</span>
+            <button class="check-btn" onclick="toggleCheck(${currentPhase},${currentWeek},${dayIdx})" title="${done?'Als offen markieren':'Als erledigt markieren'}">
+              ${done ? '✓' : '○'}
+            </button>
+            <span class="day-duration">${d.duration}</span>
+          </div>
+          <span class="arrow ${isOpen?'open':''}">›</span>
+        </div>
+        <div class="day-content ${isOpen?'open':''}" style="border-top-color:${cfg.color}18;">
+          ${blocksHTML}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// START
+// ════════════════════════════════════════════════════════════
+initTimer();
+loadFromSupabase();
+</script>
+</body>
+</html>
